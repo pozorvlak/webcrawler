@@ -22,10 +22,8 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
         return
     }
     _, urls, err := fetcher.Fetch(url)
-	fmt.Println("Found", len(urls), "children at level", depth)
     if err != nil {
         fmt.Println(err)
-		fmt.Println(crawled)
 		ch <- crawled
         return
     }
@@ -36,11 +34,9 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
     }
 	for i := 0; i < len(urls); i++ {
 		us := <-subCh
-		fmt.Println("Receiving", us, "at level", depth)
 		crawled = append(crawled, us...)
     }
 	close(subCh)
-	fmt.Println("Sending", crawled, "to level", depth + 1)
 	ch <- crawled
     return
 }
