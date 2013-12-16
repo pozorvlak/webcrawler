@@ -12,39 +12,45 @@ type Fetcher interface {
 
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
-func crawlImpl(url string, depth int, fetcher Fetcher, ch chan string) {
+func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
     // TODO: Fetch URLs in parallel.
     // TODO: Don't fetch the same URL twice.
     // This implementation doesn't do either:
 	fmt.Printf("Crawling URL %s at depth %d\n", url, depth)
+	crawled := make([]string, 1)
+	crawled[0] = url
     if depth <= 0 {
+		ch <- crawled
         return
     }
     _, urls, err := fetcher.Fetch(url)
+	fmt.Println("Found", len(urls), "children at level", depth)
     if err != nil {
         fmt.Println(err)
         return
     }
-    ch <- url
-	subCh := make(chan string)
+	subCh := make(chan []string)
     for _, u := range urls {
         go crawlImpl(u, depth-1, fetcher, subCh)
     }
 	for i := 0; i < len(urls); i++ {
-		u := <-subCh
-		ch <- u
+		us := <-subCh
+		fmt.Println("Receiving", us, "at level", depth)
+		crawled = append(crawled, us...)
     }
 	close(subCh)
+	fmt.Println("Sending", crawled, "to level", depth + 1)
+	ch <- crawled
     return
 }
 
-func Crawl(url string, depth int, fetcher Fetcher, ch chan string) {
+func Crawl(url string, depth int, fetcher Fetcher, ch chan []string) {
 	crawlImpl(url, depth, fetcher, ch)
 	close(ch)
 }
 
 func main() {
-    ch := make(chan string)
+    ch := make(chan []string)
     go Crawl("http://golang.org/", 4, fetcher, ch)
 	for u := range ch {
 		fmt.Println("Received at toplevel: ", u)
