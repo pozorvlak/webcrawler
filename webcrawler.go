@@ -16,9 +16,7 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
     // TODO: Fetch URLs in parallel.
     // TODO: Don't fetch the same URL twice.
     // This implementation doesn't do either:
-	fmt.Printf("Crawling URL %s at depth %d\n", url, depth)
-	crawled := make([]string, 1)
-	crawled[0] = url
+	crawled := make([]string, 0)
     if depth <= 0 {
 		ch <- crawled
         return
@@ -27,8 +25,11 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
 	fmt.Println("Found", len(urls), "children at level", depth)
     if err != nil {
         fmt.Println(err)
+		fmt.Println(crawled)
+		ch <- crawled
         return
     }
+	crawled = []string{ url }
 	subCh := make(chan []string)
     for _, u := range urls {
         go crawlImpl(u, depth-1, fetcher, subCh)
