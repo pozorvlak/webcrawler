@@ -16,6 +16,7 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan string) {
     // TODO: Fetch URLs in parallel.
     // TODO: Don't fetch the same URL twice.
     // This implementation doesn't do either:
+	fmt.Printf("Crawling URL %s at depth %d\n", url, depth)
     if depth <= 0 {
         return
     }
@@ -29,9 +30,7 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan string) {
     for _, u := range urls {
         go crawlImpl(u, depth-1, fetcher, subCh)
     }
-	fmt.Printf("%d: ", len(urls))
-	for i := range urls {
-		fmt.Printf("%d ", i)
+	for i := 0; i < len(urls); i++ {
 		u := <-subCh
 		ch <- u
     }
@@ -48,7 +47,7 @@ func main() {
     ch := make(chan string)
     go Crawl("http://golang.org/", 4, fetcher, ch)
 	for u := range ch {
-		fmt.Println(u)
+		fmt.Println("Received at toplevel: ", u)
 	}
 }
 
