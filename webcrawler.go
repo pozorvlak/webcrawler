@@ -10,13 +10,18 @@ type Fetcher interface {
 	Fetch(url string) (body string, urls []string, err error)
 }
 
+type Done struct {
+        url string
+        respond chan bool
+}
+
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
-func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
-	// TODO: Don't fetch the same URL twice.
-	// This implementation doesn't do either:
+func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string, done chan<- Done) {
 	crawled := make([]string, 0)
-	if depth <= 0 {
+        response := make(chan bool)
+        done <- Done{ url, response }
+	if <-response || depth <= 0 {
 		ch <- crawled
 		return
 	}
@@ -29,7 +34,7 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
 	crawled = []string{url}
 	subCh := make(chan []string)
 	for _, u := range urls {
-		go crawlImpl(u, depth-1, fetcher, subCh)
+		go crawlImpl(u, depth-1, fetcher, subCh, done)
 	}
 	for i := 0; i < len(urls); i++ {
 		us := <-subCh
@@ -41,7 +46,15 @@ func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string) {
 }
 
 func Crawl(url string, depth int, fetcher Fetcher, ch chan []string) {
-	crawlImpl(url, depth, fetcher, ch)
+        done := make(chan Done)
+        go func() {
+                seen := make(map[string]bool)
+                for query := range done {
+                        query.respond <- seen[query.url]
+                        seen[query.url] = true
+                }
+        }()
+	crawlImpl(url, depth, fetcher, ch, done)
 	close(ch)
 }
 
