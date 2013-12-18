@@ -10,70 +10,69 @@ type Fetcher interface {
 	Fetch(url string) (body string, urls []string, err error)
 }
 
-type Done struct {
+type Fetched struct {
         url string
         respond chan bool
 }
 
 type Result struct {
+        url string
         body string
         err error
 }
 
-type ResultChan chan map[string]Result
-
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
-func crawlImpl(url string, depth int, fetcher Fetcher, ch ResultChan, done chan<- Done) {
-	crawled := make(map[string]Result)
+func crawlImpl(url string, depth int, fetcher Fetcher, done chan bool,
+                fetched chan<- Fetched, output chan Result) {
         response := make(chan bool)
-        done <- Done{ url, response }
+        fetched <- Fetched{ url, response }
 	if <-response || depth <= 0 {
-		ch <- crawled
+		done <- true
 		return
 	}
 	body, urls, err := fetcher.Fetch(url)
-        crawled[url] = Result{ body, err }
+        output <- Result{ url, body, err }
 	if err != nil {
 		fmt.Println(err)
-		ch <- crawled
-		return
-	}
-	subCh := make(ResultChan)
-	for _, u := range urls {
-		go crawlImpl(u, depth-1, fetcher, subCh, done)
-	}
-	for i := 0; i < len(urls); i++ {
-		us := <-subCh
-                for k, r := range us {
-                        crawled[k] = r
+	} else {
+                children := make(chan bool)
+                for _, u := range urls {
+                        go crawlImpl(u, depth-1, fetcher, children, fetched, output)
                 }
-	}
-	close(subCh)
-	ch <- crawled
+                for i := 0; i < len(urls); i++ {
+                        <-children
+                }
+                close(children)
+        }
+        done <- true
 	return
 }
 
-func Crawl(url string, depth int, fetcher Fetcher, ch ResultChan) {
-        done := make(chan Done)
+func Crawl(url string, depth int, fetcher Fetcher, output chan Result) {
+        fetched := make(chan Fetched)
         go func() {
                 seen := make(map[string]bool)
-                for query := range done {
+                for query := range fetched {
                         query.respond <- seen[query.url]
                         seen[query.url] = true
                 }
         }()
-	crawlImpl(url, depth, fetcher, ch, done)
-	close(ch)
+        done := make(chan bool)
+        go func() {
+                <-done
+        }()
+	crawlImpl(url, depth, fetcher, done, fetched, output)
+	close(fetched)
+        close(output)
 }
 
 func main() {
-	ch := make(ResultChan)
+	ch := make(chan Result)
 	go Crawl("http://golang.org/", 4, fetcher, ch)
-        urls := <-ch
-	for url, result := range urls {
+	for result := range ch {
                 if result.err == nil {
-                        fmt.Println(url, ":", result.body)
+                        fmt.Println(result.url, ":", result.body)
                 }
 	}
 }
