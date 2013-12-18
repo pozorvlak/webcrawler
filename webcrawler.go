@@ -15,37 +15,46 @@ type Done struct {
         respond chan bool
 }
 
+type Result struct {
+        body string
+        err error
+}
+
+type ResultChan chan map[string]Result
+
 // Crawl uses fetcher to recursively crawl
 // pages starting with url, to a maximum of depth.
-func crawlImpl(url string, depth int, fetcher Fetcher, ch chan []string, done chan<- Done) {
-	crawled := make([]string, 0)
+func crawlImpl(url string, depth int, fetcher Fetcher, ch ResultChan, done chan<- Done) {
+	crawled := make(map[string]Result)
         response := make(chan bool)
         done <- Done{ url, response }
 	if <-response || depth <= 0 {
 		ch <- crawled
 		return
 	}
-	_, urls, err := fetcher.Fetch(url)
+	body, urls, err := fetcher.Fetch(url)
+        crawled[url] = Result{ body, err }
 	if err != nil {
 		fmt.Println(err)
 		ch <- crawled
 		return
 	}
-	crawled = []string{url}
-	subCh := make(chan []string)
+	subCh := make(ResultChan)
 	for _, u := range urls {
 		go crawlImpl(u, depth-1, fetcher, subCh, done)
 	}
 	for i := 0; i < len(urls); i++ {
 		us := <-subCh
-		crawled = append(crawled, us...)
+                for k, r := range us {
+                        crawled[k] = r
+                }
 	}
 	close(subCh)
 	ch <- crawled
 	return
 }
 
-func Crawl(url string, depth int, fetcher Fetcher, ch chan []string) {
+func Crawl(url string, depth int, fetcher Fetcher, ch ResultChan) {
         done := make(chan Done)
         go func() {
                 seen := make(map[string]bool)
@@ -59,10 +68,13 @@ func Crawl(url string, depth int, fetcher Fetcher, ch chan []string) {
 }
 
 func main() {
-	ch := make(chan []string)
+	ch := make(ResultChan)
 	go Crawl("http://golang.org/", 4, fetcher, ch)
-	for u := range ch {
-		fmt.Println("Received at toplevel: ", u)
+        urls := <-ch
+	for url, result := range urls {
+                if result.err == nil {
+                        fmt.Println(url, ":", result.body)
+                }
 	}
 }
 
