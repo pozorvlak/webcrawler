@@ -10,6 +10,7 @@ type Fetcher interface {
 	Fetch(url string) (body string, urls []string, err error)
 }
 
+// Has url been fetched? Respond on the channel `respond`.
 type Fetched struct {
         url string
         respond chan bool
@@ -21,8 +22,10 @@ type Result struct {
         err error
 }
 
-// Crawl uses fetcher to recursively crawl
-// pages starting with url, to a maximum of depth.
+// crawlImpl uses fetcher to recursively crawl pages starting with url, to a
+// maximum of depth. It signals that it's finished by sending a message on
+// done, checks if the URL it's crawling has been done already by querying
+// fetched, and sends the result of fetching its url to output.
 func crawlImpl(url string, depth int, fetcher Fetcher, done chan bool,
                 fetched chan<- Fetched, output chan Result) {
         response := make(chan bool)
@@ -49,6 +52,8 @@ func crawlImpl(url string, depth int, fetcher Fetcher, done chan bool,
 	return
 }
 
+// Crawl uses fetcher to recursively crawl pages starting with url, to a
+// maximum of depth, and sends the result of fetching its url to output.
 func Crawl(url string, depth int, fetcher Fetcher, output chan Result) {
         fetched := make(chan Fetched)
         go func() {
